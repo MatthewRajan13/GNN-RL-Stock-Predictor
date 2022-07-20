@@ -1,2 +1,2 @@
 # GNN-Stock-Predictor
-Creating a graph that summarizes correlations between stocks and using a Graph Neural Network to encode that information to be utilized in an RL trading agent
+This is project focused on creating a graph consiting of stocks in the S&P 500 in order to summarize correlations and relataionships between companies. A Graph Attention Network (GAT) will be used in order to conduct link prediction to determine how correlated a chosen stock is to others in the S&P 500. This information is then passed and utilized in a Reinforcement Learning agent that will train on historic data and predict trades.
