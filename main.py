@@ -14,6 +14,8 @@ def main():
     filled_tickers = fill_sp(tickers)
     adj_matrix = get_adj_matrix(filled_tickers)
     print(adj_matrix)
+    edge_index = gen_edges(adj_matrix)
+    print(edge_index)
     # y = yf.download('DVN', START_DATE, END_DATE)
     # print(y)
 
@@ -58,6 +60,19 @@ def get_adj_matrix(tickers):
                     adj_matrix[ticker1][ticker2] = 1
 
     return adj_matrix
+
+
+def gen_edges(adj_matrix):
+    edges = [[], []]
+    for i, stock in enumerate(adj_matrix):
+        for j, connected in enumerate(stock):
+            if connected == 1:  # True means i can see j and vice versa (could only look at lower/upper triangle)
+                edges[0].append(i)
+                edges[1].append(j)
+
+    edge_index = torch.tensor(edges)
+
+    return edge_index
 
 
 def check_correlation(ticker1, ticker2):
