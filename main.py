@@ -1,8 +1,12 @@
 import math
 import torch
+import warnings
 import requests
 import bs4 as bs
 import yfinance as yf
+from numba import jit
+
+warnings.filterwarnings('ignore')
 
 # Set the start and end date
 START_DATE = '2022-05-01'
@@ -12,10 +16,15 @@ END_DATE = '2022-06-01'
 def main():
     tickers = get_sp_list()
     filled_tickers = fill_sp(tickers)
+    print(filled_tickers)
     adj_matrix = get_adj_matrix(filled_tickers)
     print(adj_matrix)
     edge_index = gen_edges(adj_matrix)
     print(edge_index)
+    x = get_node_features(filled_tickers)
+
+    print(type(x))
+
     # y = yf.download('DVN', START_DATE, END_DATE)
     # print(y)
 
@@ -39,9 +48,16 @@ def get_sp_list():
 
 def fill_sp(tickers):
     filled_tickers = []
-    for ticker in tickers:
+    for i, ticker in enumerate(tickers):
+        print("{}: {} of 500".format(ticker, i))
         data = yf.download(ticker, START_DATE, END_DATE)
-        # TODO: Figure out how to try again downloading data if it fails the first time, yfinance super finicky
+
+        # Get Open, High, Low, Close, Adj Close, Volume
+        data.columns = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
+
+        data = data.dropna()
+        assert len(data) == 21, data
+
         filled_tickers.append(data)
 
     return filled_tickers
@@ -73,6 +89,17 @@ def gen_edges(adj_matrix):
     edge_index = torch.tensor(edges)
 
     return edge_index
+
+
+def get_node_features(tickers):
+    x = []
+    for i, ticker in enumerate(tickers):
+        node_features = ticker.to_numpy()
+        x.append(node_features)
+
+    x = torch.tensor(x, dtype=float)
+
+    return x
 
 
 def check_correlation(ticker1, ticker2):
