@@ -16,11 +16,13 @@ warnings.filterwarnings('ignore')
 START_DATE = '2022-05-01'
 END_DATE = '2022-06-01'
 
+DESIRED_STOCK = 'MSFT'
+
 
 def main():
     # Get S&P 500 data
     tickers = get_sp_list()
-    filled_tickers = fill_sp(tickers)
+    filled_tickers, stock_index = fill_sp(tickers)
 
     # Graph attributes
     adj_matrix = get_adj_matrix(filled_tickers)
@@ -57,13 +59,14 @@ def fill_sp(tickers):
 
         # Get Open, High, Low, Close, Adj Close, Volume
         data.columns = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
-
         data = data.dropna()
-        assert len(data) == 21, data
+
+        if ticker == DESIRED_STOCK:
+            stock_index = i
 
         filled_tickers.append(data)
 
-    return filled_tickers
+    return filled_tickers, stock_index
 
 
 def get_adj_matrix(tickers):

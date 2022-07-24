@@ -7,6 +7,7 @@ from torch_geometric.nn import GAE, SAGEConv
 GRAPH_ATTRIBUTES = 6
 HIDDEN_DIM = 64
 
+
 class GNNEncoder(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(GNNEncoder, self).__init__()
@@ -55,6 +56,6 @@ class GNNAutoEncoder(nn.Module):
     def init_hidden(self):
         return Parameter(torch.zeros(1, HIDDEN_DIM))
 
-    def forward(self, data):
+    def forward(self, data, stock_index):
         a = self.mode.encode(data.x, data.edge_index)
-        return a[0], a[1]
+        return a[0][stock_index], a[1][stock_index]
