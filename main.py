@@ -5,6 +5,10 @@ import requests
 import bs4 as bs
 import yfinance as yf
 from numba import jit
+from torch_geometric.data import Data
+from torch_geometric.utils import to_networkx
+import networkx as nx
+import matplotlib.pyplot as plt
 
 warnings.filterwarnings('ignore')
 
@@ -14,19 +18,18 @@ END_DATE = '2022-06-01'
 
 
 def main():
+    # Get S&P 500 data
     tickers = get_sp_list()
     filled_tickers = fill_sp(tickers)
-    print(filled_tickers)
+
+    # Graph attributes
     adj_matrix = get_adj_matrix(filled_tickers)
-    print(adj_matrix)
     edge_index = gen_edges(adj_matrix)
-    print(edge_index)
+    edge_index = torch.transpose(edge_index, 0, 1)
     x = get_node_features(filled_tickers)
 
-    print(type(x))
-
-    # y = yf.download('DVN', START_DATE, END_DATE)
-    # print(y)
+    # Make graph
+    data = Data(x=x, edge_index=edge_index)
 
 
 def get_sp_list():
