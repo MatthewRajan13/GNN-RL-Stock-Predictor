@@ -1,37 +1,38 @@
-import math
 import torch
 import warnings
 import requests
 import bs4 as bs
+import pandas as pd
 import yfinance as yf
-from numba import jit
 from torch_geometric.data import Data
 from torch_geometric.utils import to_networkx
+from sklearn.preprocessing import MinMaxScaler
 import networkx as nx
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 warnings.filterwarnings('ignore')
 
 # Set the start and end date
 START_DATE = '2022-05-01'
-END_DATE = '2022-06-01'
-
-DESIRED_STOCK = 'MSFT'
 
 
 def main():
-    # Get S&P 500 data
-    tickers = get_sp_list()
-    filled_tickers, stock_index = fill_sp(tickers)
+    tickers = ['BAL', 'BNO', 'CANE', 'CORN', 'COW', 'CPER', 'IAU', 'JO', 'SLV',
+               'SOYB', 'UGA', 'UNG', 'USO', 'WEAT']
+    filled_tickers = fill_sp(tickers)
 
     # Graph attributes
-    adj_matrix = get_adj_matrix(filled_tickers)
-    edge_index = gen_edges(adj_matrix)
-    edge_index = torch.transpose(edge_index, 0, 1)
-    x = get_node_features(filled_tickers)
+    edge_index, edge_weights, correlation_matrix = get_graph_attributes(filled_tickers)
 
-    # Make graph
-    data = Data(x=x, edge_index=edge_index)
+    # Load node features and labels into tensors
+    scaler = MinMaxScaler()
+    scaled_df = pd.DataFrame(scaler.fit_transform(filled_tickers),
+                                         columns=filled_tickers.columns, index=filled_tickers.index)
+    node_features = torch.tensor(scaled_df.values, dtype=torch.float)
+    node_labels = torch.tensor(range(len(tickers)))
+
+    data = Data(x=node_features, y=node_labels, edge_index=edge_index, edge_attr=edge_weights, num_nodes=len(tickers))
+    plot_graph(data, tickers)
 
 
 def get_sp_list():
@@ -52,95 +53,70 @@ def get_sp_list():
 
 
 def fill_sp(tickers):
-    filled_tickers = []
-    for i, ticker in enumerate(tickers):
-        print("{}: {} of 500".format(ticker, i))
-        data = yf.download(ticker, START_DATE, END_DATE)
+    data = yf.download(tickers, start=START_DATE)['Adj Close']
 
-        # Get Open, High, Low, Close, Adj Close, Volume
-        data.columns = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
-        data = data.dropna()
+    data = data.fillna(0)
 
-        if ticker == DESIRED_STOCK:
-            stock_index = i
-
-        filled_tickers.append(data)
-
-    return filled_tickers, stock_index
+    return data
 
 
 def get_adj_matrix(tickers):
-    adj_matrix = torch.zeros(500, 500)
-    for ticker1 in range(500):
-        for ticker2 in range(500):
-            if ticker1 == ticker2:
-                pass
-            else:
-                print("Stock #: {} vs {}".format(ticker1, ticker2))
-                correlation = check_correlation(tickers[ticker1], tickers[ticker2])
-                if correlation:
-                    adj_matrix[ticker1][ticker2] = 1
+    returns_df = tickers.pct_change()
+    adj_matrix = returns_df.corr()
 
     return adj_matrix
 
 
-def gen_edges(adj_matrix):
-    edges = [[], []]
-    for i, stock in enumerate(adj_matrix):
-        for j, connected in enumerate(stock):
-            if connected == 1:  # True means i can see j and vice versa (could only look at lower/upper triangle)
-                edges[0].append(i)
-                edges[1].append(j)
+def get_graph_attributes(filled_tickers):
+    adj_matrix = get_adj_matrix(filled_tickers)
+    adj_matrix = adj_matrix.fillna(0)
+    adj_array = adj_matrix.to_numpy()
+    adj_tensor = torch.from_numpy(adj_array).float()
+    edge_index = torch.nonzero(adj_tensor, as_tuple=False).t().contiguous()
+    edge_weights = adj_tensor[edge_index[0], edge_index[1]]
 
-    edge_index = torch.tensor(edges)
+    mask = torch.abs(edge_weights) >= .3
+    edge_index = edge_index[:, mask]
+    edge_weights = edge_weights[mask]
 
-    return edge_index
-
-
-def get_node_features(tickers):
-    x = []
-    for i, ticker in enumerate(tickers):
-        node_features = ticker.to_numpy()
-        x.append(node_features)
-
-    x = torch.tensor(x, dtype=float)
-
-    return x
+    return edge_index, edge_weights, adj_matrix
 
 
-def check_correlation(ticker1, ticker2):
-    # Clean Dataframe
-    ticker1 = ticker1.dropna()
-    ticker2 = ticker2.dropna()
+def plot_graph(data, tickers):
+    # Convert to NetworkX graph
+    graph = to_networkx(data)
+    pos = nx.spring_layout(graph)
 
-    # Calculate Deviation
-    ticker1_mean = ticker1['Adj Close'].mean()
-    ticker2_mean = ticker2['Adj Close'].mean()
+    fig = go.Figure()
 
-    ticker1_tensor = torch.tensor(ticker1['Adj Close'], dtype=float)
-    ticker1_deviation = torch.sub(ticker1_tensor, ticker1_mean)
+    for i, node in enumerate(graph.nodes()):
+        fig.add_trace(go.Scatter(x=[pos[node][0]],
+                                 y=[pos[node][1]],
+                                 mode='markers+text',
+                                 marker=dict(size=10),
+                                 text=tickers[i],
+                                 textposition="middle right"))
+    edge_trace = go.Scatter(x=[], y=[], mode='lines',
+                            line=dict(width=0.5, color='grey'), hoverinfo='none')
 
-    ticker2_tensor = torch.tensor(ticker2['Adj Close'], dtype=float)
-    ticker2_deviation = torch.sub(ticker2_tensor, ticker2_mean)
+    for edge in graph.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_trace['x'] += tuple([x0, x1, None])
+        edge_trace['y'] += tuple([y0, y1, None])
 
-    # Calculate covariance
-    cov = float(torch.dot(ticker1_deviation, ticker2_deviation))
+    fig.add_trace(edge_trace)
+    fig.update_layout(
+        title="Ticker Correlation Graph",
+        title_font_size=24,
+        showlegend=False,
+        hovermode='closest',
+        margin=dict(b=20, l=5, r=5, t=40),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
+    )
 
-    # Calculate standard deviation
-    ticker1_deviation_sq = float(torch.dot(ticker1_deviation, ticker1_deviation))
-    ticker2_deviation_sq = float(torch.dot(ticker2_deviation, ticker2_deviation))
-
-    sd = math.sqrt(ticker1_deviation_sq * ticker2_deviation_sq)
-
-    # Calculate correlation
-    correlation = cov / sd
-
-    if abs(correlation) > .5:  # Arbitrary right now, ignores edge weights, need to figure out
-        correlation = True
-    else:
-        correlation = False
-
-    return correlation
+    fig.show()
 
 
 if __name__ == "__main__":
