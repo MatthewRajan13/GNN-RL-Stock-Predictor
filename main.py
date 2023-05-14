@@ -9,6 +9,8 @@ from torch_geometric.utils import to_networkx
 from sklearn.preprocessing import MinMaxScaler
 import networkx as nx
 import plotly.graph_objects as go
+import torch.nn.functional as F
+from gnn_autoencoder import GNNAutoEncoder
 
 warnings.filterwarnings('ignore')
 
@@ -22,17 +24,22 @@ def main():
     filled_tickers = fill_sp(tickers)
 
     # Graph attributes
-    edge_index, edge_weights, correlation_matrix = get_graph_attributes(filled_tickers)
-
-    # Load node features and labels into tensors
-    scaler = MinMaxScaler()
-    scaled_df = pd.DataFrame(scaler.fit_transform(filled_tickers),
-                                         columns=filled_tickers.columns, index=filled_tickers.index)
-    node_features = torch.tensor(scaled_df.values, dtype=torch.float)
-    node_labels = torch.tensor(range(len(tickers)))
+    edge_index, edge_weights, correlation_matrix, node_features, node_labels = get_graph_attributes(filled_tickers, tickers)
 
     data = Data(x=node_features, y=node_labels, edge_index=edge_index, edge_attr=edge_weights, num_nodes=len(tickers))
+
     plot_graph(data, tickers)
+
+    input_dim = 14
+    hidden_dim = 32
+    latent_dim = 14
+
+    model = GNNAutoEncoder(input_dim, hidden_dim, latent_dim)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+    encoded_data = train_gnn(model, data, optimizer, 100)
+
+    print(encoded_data)
 
 
 def get_sp_list():
@@ -67,7 +74,7 @@ def get_adj_matrix(tickers):
     return adj_matrix
 
 
-def get_graph_attributes(filled_tickers):
+def get_graph_attributes(filled_tickers, tickers):
     adj_matrix = get_adj_matrix(filled_tickers)
     adj_matrix = adj_matrix.fillna(0)
     adj_array = adj_matrix.to_numpy()
@@ -79,7 +86,14 @@ def get_graph_attributes(filled_tickers):
     edge_index = edge_index[:, mask]
     edge_weights = edge_weights[mask]
 
-    return edge_index, edge_weights, adj_matrix
+    # Load node features and labels into tensors
+    scaler = MinMaxScaler()
+    scaled_df = pd.DataFrame(scaler.fit_transform(filled_tickers),
+                                         columns=filled_tickers.columns, index=filled_tickers.index)
+    node_features = torch.tensor(scaled_df.values, dtype=torch.float)
+    node_labels = torch.tensor(range(len(tickers)))
+
+    return edge_index, edge_weights, adj_matrix, node_features, node_labels
 
 
 def plot_graph(data, tickers):
@@ -117,6 +131,28 @@ def plot_graph(data, tickers):
     )
 
     fig.show()
+
+
+def train_gnn(model, data, optimizer, num_epochs):
+    x = data.x.float()
+    edge_index = data.edge_index.long()
+
+    for epoch in range(num_epochs):
+        model.train()
+        optimizer.zero_grad()
+        x_hat = model(x, edge_index)
+        loss = F.mse_loss(x_hat, x)
+        loss.backward()
+        optimizer.step()
+
+        if (epoch + 1) % 10 == 0:
+            print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}")
+
+    model.eval()
+    with torch.no_grad():
+        encoded_data = model.encode(x, edge_index)
+
+    return encoded_data
 
 
 if __name__ == "__main__":
