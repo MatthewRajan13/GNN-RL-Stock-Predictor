@@ -25,6 +25,7 @@ DESIRED_STOCK = 'BNO'
 def main():
     tickers = ['BAL', 'BNO', 'CANE', 'CORN', 'COW', 'CPER', 'IAU', 'JO', 'SLV',
                'SOYB', 'UGA', 'UNG', 'USO', 'WEAT']
+
     filled_tickers, price = fill_sp(tickers)
 
     # Graph attributes
@@ -32,7 +33,7 @@ def main():
 
     data = Data(x=node_features, y=node_labels, edge_index=edge_index, edge_attr=edge_weights, num_nodes=len(tickers))
 
-    # plot_graph(data, tickers)
+    plot_graph(data, tickers)
 
     # Define the dimensions for the autoencoder
     input_dim = data.x.size(2)
@@ -43,7 +44,7 @@ def main():
     model = GNNAutoEncoder(input_dim, hidden_dim, encoding_dim)
 
     # move to device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # model = model.to(device)
     # data = data.to(device)
 
@@ -63,7 +64,7 @@ def main():
     # Define hyperparameters
     state_size = 4
     action_size = 3
-    learning_rate = 0.001
+    learning_rate = 0.0001
     discount_factor = 0.99
     epsilon = 1.0
 
@@ -71,14 +72,11 @@ def main():
     agent = QLearningAgent(state_size, action_size, learning_rate, discount_factor, epsilon)
 
     # Create environment
-    # data = np.random.rand(263, 4)  # Replace with your actual data
     prices = price[DESIRED_STOCK].values  # Replace with your actual prices
-    env = Environment(node_features[:, tickers.index(DESIRED_STOCK)], prices)
-    initial = env.portfolio_value
-    print(initial)
+    env = Environment(selected_data, prices)
 
     # Train the agent
-    num_episodes = 100000
+    num_episodes = 1000000
     done = False
 
     for episode in range(num_episodes):
@@ -89,24 +87,8 @@ def main():
             next_state, reward, done = env.take_action(action)
             agent.update_q_network(state, action, reward, next_state)
             state = next_state
-            print(env.portfolio_value)
 
-    print("P/L: ", env.portfolio_value - initial)
-
-        # Print episode information
-        # if (episode + 1) % 10 == 0:
-        #     print("Episode: {}, Portfolio Value: {:.2f}".format(episode + 1, env.portfolio_value))
-    #
-    # # Test the agent
-    # state = env.get_state()
-    # done = False
-    #
-    # while not done:
-    #     action = agent.get_action(state)
-    #     next_state, reward, done = env.take_action(action)
-    #     state = next_state
-    #
-    # print("Final Portfolio Value: {:.2f}".format(env.portfolio_value))
+    print("P/L: ", env.balance - 25.56)
 
 
 def get_sp_list():
@@ -130,7 +112,7 @@ def fill_sp(tickers):
     data = pd.DataFrame()
     price = pd.DataFrame()
     for ticker in tickers:
-        ticker_data = yf.download(ticker, start=START_DATE).fillna(0)
+        ticker_data = yf.download(ticker).fillna(0)
         price[ticker] = ticker_data['Adj Close']
         ticker_data['SMA'] = ta.trend.sma_indicator(ticker_data['Adj Close'], window=20).fillna(0)
         ticker_data['RSI'] = ta.momentum.rsi(ticker_data['Adj Close']).fillna(0)

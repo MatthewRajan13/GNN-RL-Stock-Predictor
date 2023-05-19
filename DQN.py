@@ -54,8 +54,10 @@ class Environment:
         self.data = data
         self.prices = prices
         self.num_steps = data.shape[0]
-        self.portfolio_value = prices[0]*5
+        self.num_shares = 1
         self.current_step = 0
+        self.portfolio_value = 0
+        self.balance = 0
 
     def get_state(self):
         if self.current_step == self.num_steps:
@@ -70,19 +72,24 @@ class Environment:
         else:
             next_price = self.prices[self.current_step]
 
-        if action == 0:  # Hold
-            profit = next_price - current_price
-        if action == 1:  # Buy
-            profit = next_price - current_price
-            self.portfolio_value += current_price
-        elif action == 2:  # Sell
-            profit = current_price - next_price
-            self.portfolio_value -= current_price
+        if action == 1 and self.balance > current_price:  # Buy
+            self.num_shares += 1
+            self.balance -= current_price
+            ret = ((next_price - current_price) / current_price) * 10
+        elif action == 2 and self.num_shares > 0:  # Sell
+            self.num_shares -= 1
+            self.balance += current_price
+            ret = ((current_price - next_price) / current_price) * 10
+        else:  # Hold
+            ret = ((next_price - current_price) / current_price) * 10
+
+        if -.3 < ret <= 0:
+            ret = 1e-3
 
         self.current_step += 1
 
         next_state = self.get_state()
         done = (self.current_step == self.num_steps)
 
-        return next_state, profit, done
+        return next_state, ret, done
 
