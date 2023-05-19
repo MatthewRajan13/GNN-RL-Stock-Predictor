@@ -1,2 +1,2 @@
-# GNN-RL-Stock-Predictor
+# GNN-Stock-Predictor
 This project is focused on combining the powerful and inate ability graphs have at describing information with a Reinforcement Learning agent that can leverage the graphical information for hightened performance at trading stocks. To accomplish this a graph will be created with each node being a stock with its attributes being: Price, RSI, SMA, and MACD, and each node is connected by their correlation to each ot-er. A Graph Neural Network (GNN) Auto Encoder will be used to reduce the dimensionality of the graph while still keeping the valuable information the graph contains. This dimensionalized data will then be passed into a reinforcement learning algorithm which will attempt to learn how to trade.
